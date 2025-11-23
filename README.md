@@ -27,19 +27,22 @@ Producer   |    Express        |
 
 ## Core Components
 
-- `POST /publish/:topic` accepts events for any topic (e.g., `ams`, `xovis`).
-- In-memory distributor fans the payload to WebSocket sessions currently subscribed to that topic.
-- Consumers connect via `ws://<host>/stream/:topic` to receive real-time events for that topic.
-- Topic-specific JSON schemas under `schemas/` validate inbound payloads before broadcasting.
+- Topic-specific JSON schemas under `schemas/` validate inbound payloads before broadcasting. `ams` requires `flightId`, `event`, and `remarks`; `xovis` requires `location`, `queueName`, `waitingTime`, and optional `remarks`.
 
 ## Local Dev Quickstart
 
 1. Install Node.js 18+ (includes `npm`).
 2. `npm install` to pull dependencies.
 3. `npm run dev` starts Express with WebSocket support.
-4. Publish a sample event: `curl -X POST http://localhost:3000/publish/ams -H "Content-Type: application/json" -d '{"flightId":"AAL123","event":"ARRIVED","gate":"A21"}'`.
-5. Connect a WebSocket client (e.g., browser console, `wscat`) to `ws://localhost:3000/stream/ams` and watch events arrive. Join another topic (e.g., `ws://localhost:3000/stream/xovis`) to see isolation per stream.
-6. Visit `http://localhost:3000/admin` to browse the latest entries captured in `inbound.log`.
+4. Publish an AMS event: `curl -X POST http://localhost:3000/publish/ams -H "Content-Type: application/json" -d '{"flightId":"AAL123","event":"ARRIVED","remarks":"ONTIME"}'`.
+5. Publish a Xovis event: `curl -X POST http://localhost:3000/publish/xovis -H "Content-Type: application/json" -d '{"location":"T1","queueName":"SEC1","waitingTime":"12","remarks":"BUSY"}'`.
+6. Connect a WebSocket client (e.g., browser console, `wscat`) to `ws://localhost:3000/stream/ams` or `ws://localhost:3000/stream/xovis` and watch topic-scoped events arrive.
+7. Visit `http://localhost:3000/admin` to browse the latest entries captured in `inbound.log`.
+
+## Load Testing
+
+- Run `node --test tests/loadtest.test.js` to pound `/publish/loadtest` with 10→100 requests per second.
+- Each burst logs a `loadtest` summary entry in `inbound.log` (`transactionsPerSecond`, `success`, `failed`, `avgResponseTimeMs`) and prints a `[LOADTEST]` line to the console so you can spot the break point.
 
 ## Next Steps
 

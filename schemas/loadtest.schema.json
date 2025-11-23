@@ -1,0 +1,31 @@
+{
+  "topic": "loadtest",
+  "description": "Synthetic load test metrics and probes",
+  "required": [],
+  "fields": {
+    "messageId": {
+      "type": "alphanumeric",
+      "description": "Identifier for individual load probe"
+    },
+    "mode": {
+      "type": "alphabetic",
+      "description": "Entry category (e.g., SUMMARY)"
+    },
+    "transactionsPerSecond": {
+      "type": "numeric",
+      "description": "Target transactions per second"
+    },
+    "success": {
+      "type": "numeric",
+      "description": "Number of successful responses"
+    },
+    "failed": {
+      "type": "numeric",
+      "description": "Number of failed responses"
+    },
+    "avgResponseTimeMs": {
+      "type": "numeric",
+      "description": "Average response time in milliseconds"
+    }
+  }
+}

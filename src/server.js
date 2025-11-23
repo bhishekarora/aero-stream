@@ -11,7 +11,9 @@ const schemaCache = new Map();
 
 const TYPE_PATTERNS = {
   alpha: /^[A-Za-z]+$/,
+  alphabetic: /^[A-Za-z]+$/,
   alphanumeric: /^[A-Za-z0-9]+$/,
+  numeric: /^\d+$/,
 };
 
 function ensureLogFile() {
@@ -21,7 +23,9 @@ function ensureLogFile() {
     // no-op when directory already exists
   }
 
-  fs.writeFileSync(LOG_FILE, '', 'utf8');
+  if (!fs.existsSync(LOG_FILE)) {
+    fs.writeFileSync(LOG_FILE, '', 'utf8');
+  }
 }
 
 async function loadTopicSchema(topic) {

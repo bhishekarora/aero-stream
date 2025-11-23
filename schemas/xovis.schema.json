@@ -1,0 +1,23 @@
+{
+  "topic": "xovis",
+  "description": "Xovis queue analytics payload",
+  "required": ["location", "queueName", "waitingTime"],
+  "fields": {
+    "location": {
+      "type": "alphanumeric",
+      "description": "Location identifier within the terminal"
+    },
+    "queueName": {
+      "type": "alphanumeric",
+      "description": "Queue name or area tag"
+    },
+    "waitingTime": {
+      "type": "numeric",
+      "description": "Current average waiting time in minutes"
+    },
+    "remarks": {
+      "type": "alphanumeric",
+      "description": "Optional remarks"
+    }
+  }
+}

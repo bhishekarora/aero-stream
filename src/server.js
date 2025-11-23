@@ -91,7 +91,7 @@ function escapeHtml(unsafe) {
 async function appendLog(entry) {
   const serialized = `${JSON.stringify(entry)}\n`;
   await fsp.appendFile(LOG_FILE, serialized, 'utf8');
-}
+} 
 
 async function readLogEntries() {
   try {

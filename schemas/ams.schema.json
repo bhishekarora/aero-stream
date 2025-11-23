@@ -1,0 +1,19 @@
+{
+  "topic": "ams",
+  "description": "Airside Movement System event payload",
+  "required": ["flightId", "event", "gate"],
+  "fields": {
+    "flightId": {
+      "type": "alphanumeric",
+      "description": "Airline flight identifier (letters and numbers only)"
+    },
+    "event": {
+      "type": "alphabetic",
+      "description": "Event keyword (letters only)"
+    },
+    "gate": {
+      "type": "alphanumeric",
+      "description": "Gate identifier (letters or digits)"
+    }
+  }
+}

@@ -41,14 +41,26 @@ Producer   |    Express        |
 
 ## Load Testing
 
-- Run `node --test tests/loadtest.test.js` to pound `/publish/loadtest` with 100→1000 requests per second (step = 100).
-- Each burst logs a `loadtest` summary entry in `inbound.log` (`transactionsPerSecond`, `success`, `failed`, `avgResponseTimeMs`) and prints a `[LOADTEST]` line to the console so you can spot the break point.
+- `node --test tests/loadtest.test.js` hammers `/publish/loadtest` with bursts from 100 to 1000 requests per second.
+- The stream reliably sustained 900 TPS while continuing to fan out WebSocket traffic to connected clients.
+- Summary messages are stored as `loadtest` entries in `inbound.log`, capturing transactions per second, success/fail counts, and average response time.
+- ![Load test results](images/lt.png)
 
-## Sample Consumers
+## Clients of Aero Stream
 
-- Node.js (Xovis): `clients/node-consumer` connects to `ws://localhost:3000/stream/xovis` and serves a dashboard at `http://localhost:4100/incoming`. Install with `npm install` then `npm start` in that folder.
-- Spring Boot (AMS): `clients/spring-consumer` connects to `ws://localhost:3000/stream/ams` and serves a dashboard at `http://localhost:4200/incoming`. Build/run with `mvn spring-boot:run` inside the consumer directory.
+### Angular Dashboard (Xovis)
 
+- Folder: `clients/node-consumer`
+- Connects over `ws://localhost:3000/stream/xovis`, caches the latest 200 payloads, and serves a live dashboard at `http://localhost:4100/incoming`.
+- Run with `npm install && npm start` from within the client directory.
+- ![Angular client](images/angular_backend.png)
+
+### Spring Backend (AMS)
+
+- Folder: `clients/spring-consumer`
+- Uses Java-WebSocket to subscribe to `ws://localhost:3000/stream/ams` and exposes both HTML and JSON endpoints at `http://localhost:4200/incoming` and `/events`.
+- Start via `mvn spring-boot:run` inside the consumer module; received AMS events appear instantly in the dashboard.
+- ![Spring client](images/spring_backend.png)
 ## Next Steps
 
 - Wrap published events in a consistent schema (timestamp, source, payload).

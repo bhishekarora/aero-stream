@@ -36,7 +36,7 @@ function buildHtmlPage() {
     </head>
     <body>
       <header>
-        <h1>Xovis WebSocket Feed</h1>
+        <h1>Angular Consumer Xovis WebSocket Feed</h1>
         <p>Connected to ${SOURCE_WS_URL}</p>
       </header>
       <main>
@@ -47,12 +47,12 @@ function buildHtmlPage() {
           const res = await fetch('/events');
           const data = await res.json();
           const container = document.getElementById('messages');
-          container.innerHTML = data.messages.map((msg) => `
+          container.innerHTML = data.messages.map((msg) => \`
             <div class="msg">
-              <div class="timestamp">${msg.receivedAt}</div>
-              <pre>${JSON.stringify(msg.payload, null, 2)}</pre>
+              <div class="timestamp">\${msg.receivedAt}</div>
+              <pre>\${JSON.stringify(msg.payload, null, 2)}</pre>
             </div>
-          `).join('');
+          \`).join('');
         }
 
         refresh();

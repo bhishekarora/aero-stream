@@ -2,9 +2,10 @@
 
 ## Overview
 
-Universal Architecture with schema/filteration support and full  integration support with existing systems(Angular/Spring bundled clients for use but all supported)
 
 Aero Stream is a lightweight HTTP + WebSocket event fan-out designed for airport operations. Think of it as a simpler alternative to Kafka or Azure Event Hub for ingesting feeds from AMS, Xovis, and other Aero sensor systems. Producers post events to topic-specific HTTP endpoints, and every consumer subscribed to that topic instantly receives those events over WebSockets.
+
+Universal Architecture with schema/filteration support and full  integration support with existing systems(Angular/Spring bundled clients for use but all supported)
 
 ```
 		   +------------------+

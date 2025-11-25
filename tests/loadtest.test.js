@@ -3,15 +3,24 @@
 const test = require('node:test');
 const supertest = require('supertest');
 
-const { createAeroStreamServer } = require('../src/server');
+const BASE_URL = process.env.AERO_STREAM_BASE_URL || 'http://localhost:3000';
+const request = supertest(BASE_URL);
 
-const LOAD_LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+const LOAD_LEVELS = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 
 function hrtimeToMs(start, end) {
   return Number(end - start) / 1_000_000;
 }
 
-async function runBurst(request, rate) {
+async function ensureServerAvailable() {
+  try {
+    await request.get('/healthz').timeout({ deadline: 2000 });
+  } catch (error) {
+    throw new Error(`Aero Stream server is not reachable at ${BASE_URL}. Start it before running tests.`);
+  }
+}
+
+async function runBurst(rate) {
   let success = 0;
   let failed = 0;
   const durations = [];
@@ -20,7 +29,7 @@ async function runBurst(request, rate) {
 
   const tasks = Array.from({ length: rate }, (_, idx) => {
     const messageId = `L${rate}${idx}${base}`;
-    const payload = { messageId };
+    const payload = { mode: 'PROBE', messageId };
 
     return (async () => {
       const start = process.hrtime.bigint();
@@ -54,7 +63,7 @@ async function runBurst(request, rate) {
   return { rate, success, failed, avgMs };
 }
 
-async function recordSummary(request, summary) {
+async function recordSummary(summary) {
   const { rate, success, failed, avgMs } = summary;
 
   await request
@@ -74,18 +83,10 @@ async function recordSummary(request, summary) {
 }
 
 test('Load test /publish/loadtest across burst levels', async (t) => {
-  const { server } = createAeroStreamServer();
-
-  await new Promise((resolve) => {
-    server.listen(0, resolve);
-  });
-
-  t.after(() => new Promise((resolve) => server.close(resolve)));
-
-  const request = supertest(server);
+  await ensureServerAvailable();
 
   for (const rate of LOAD_LEVELS) {
-    const summary = await runBurst(request, rate);
-    await recordSummary(request, summary);
+    const summary = await runBurst(rate);
+    await recordSummary(summary);
   }
 });

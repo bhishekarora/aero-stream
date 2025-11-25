@@ -7,13 +7,9 @@ const fs = require('node:fs/promises');
 const supertest = require('supertest');
 const WebSocket = require('ws');
 
-const { createAeroStreamServer } = require('../src/server');
-
+const BASE_URL = process.env.AERO_STREAM_BASE_URL || 'http://localhost:3000';
 const LOG_FILE = path.resolve(process.cwd(), 'inbound.log');
-
-async function closeServer(server) {
-  await new Promise((resolve) => server.close(resolve));
-}
+const request = supertest(BASE_URL);
 
 async function closeSocket(ws) {
   if (ws.readyState === WebSocket.CLOSED) {
@@ -26,17 +22,49 @@ async function closeSocket(ws) {
   });
 }
 
+async function ensureServerAvailable() {
+  try {
+    await request.get('/healthz').timeout({ deadline: 2000 });
+  } catch (error) {
+    throw new Error(`Aero Stream server is not reachable at ${BASE_URL}. Start it before running tests.`);
+  }
+}
+
+function buildWebSocketUrl(topic) {
+  const url = new URL(BASE_URL);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `/stream/${topic}`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+async function findLogEntry(predicate) {
+  const rawLog = await fs.readFile(LOG_FILE, 'utf8');
+  const lines = rawLog
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .reverse();
+
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (predicate(entry)) {
+        return entry;
+      }
+    } catch (error) {
+      // skip malformed lines
+    }
+  }
+
+  return null;
+}
+
 test('Xovis payloads broadcast to subscribers and persist', async (t) => {
-  const { server } = createAeroStreamServer();
+  await ensureServerAvailable();
 
-  await new Promise((resolve) => {
-    server.listen(0, resolve);
-  });
-
-  const { port } = server.address();
-  t.after(() => closeServer(server));
-
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/stream/xovis`);
+  const ws = new WebSocket(buildWebSocketUrl('xovis'));
 
   await new Promise((resolve, reject) => {
     ws.once('open', resolve);
@@ -57,13 +85,13 @@ test('Xovis payloads broadcast to subscribers and persist', async (t) => {
   });
 
   const payload = {
-    location: 'T1',
+    location: `T${Date.now() % 1000}`,
     queueName: 'SEC1',
     waitingTime: '12',
     remarks: 'BUSY',
   };
 
-  await supertest(server)
+  await request
     .post('/publish/xovis')
     .send(payload)
     .expect(202);
@@ -74,26 +102,25 @@ test('Xovis payloads broadcast to subscribers and persist', async (t) => {
 
   await closeSocket(ws);
 
-  const rawLog = await fs.readFile(LOG_FILE, 'utf8');
-  const lines = rawLog.trim().split('\n');
-  const last = JSON.parse(lines.at(-1));
+  const entry = await findLogEntry((logEntry) => {
+    return (
+      logEntry.topic === 'xovis' &&
+      logEntry.payload &&
+      logEntry.payload.location === payload.location &&
+      logEntry.payload.queueName === payload.queueName
+    );
+  });
 
-  assert.equal(last.topic, 'xovis');
-  assert.deepEqual(last.payload, payload);
+  assert.ok(entry, 'Expected Xovis payload to be recorded in inbound.log');
+  assert.deepEqual(entry.payload, payload);
 
   console.log('[XOVIS] Broadcast + persistence test passed');
 });
 
 test('Xovis payloads enforce schema rules', async (t) => {
-  const { server } = createAeroStreamServer();
+  await ensureServerAvailable();
 
-  await new Promise((resolve) => {
-    server.listen(0, resolve);
-  });
-
-  t.after(() => closeServer(server));
-
-  await supertest(server)
+  await request
     .post('/publish/xovis')
     .send({ queueName: 'SEC1', waitingTime: '10', remarks: 'BUSY' })
     .expect(422)
@@ -101,7 +128,7 @@ test('Xovis payloads enforce schema rules', async (t) => {
       assert.match(res.body.error, /location/);
     });
 
-  await supertest(server)
+  await request
     .post('/publish/xovis')
     .send({ location: 'T1', queueName: 'SEC1', waitingTime: 'TEN', remarks: 'BUSY' })
     .expect(422)

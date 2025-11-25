@@ -7,13 +7,9 @@ const fs = require('node:fs/promises');
 const supertest = require('supertest');
 const WebSocket = require('ws');
 
-const { createAeroStreamServer } = require('../src/server');
-
+const BASE_URL = process.env.AERO_STREAM_BASE_URL || 'http://localhost:3000';
 const LOG_FILE = path.resolve(process.cwd(), 'inbound.log');
-
-async function closeServer(server) {
-  await new Promise((resolve) => server.close(resolve));
-}
+const request = supertest(BASE_URL);
 
 async function closeSocket(ws) {
   if (ws.readyState === WebSocket.CLOSED) {
@@ -26,17 +22,49 @@ async function closeSocket(ws) {
   });
 }
 
+async function ensureServerAvailable() {
+  try {
+    await request.get('/healthz').timeout({ deadline: 2000 });
+  } catch (error) {
+    throw new Error(`Aero Stream server is not reachable at ${BASE_URL}. Start it before running tests.`);
+  }
+}
+
+function buildWebSocketUrl(topic) {
+  const url = new URL(BASE_URL);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `/stream/${topic}`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+async function findLogEntry(predicate) {
+  const rawLog = await fs.readFile(LOG_FILE, 'utf8');
+  const lines = rawLog
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .reverse();
+
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (predicate(entry)) {
+        return entry;
+      }
+    } catch (error) {
+      // skip malformed lines written before tests were run
+    }
+  }
+
+  return null;
+}
+
 test('AMS payloads broadcast to subscribers and persist', async (t) => {
-  const { server } = createAeroStreamServer();
+  await ensureServerAvailable();
 
-  await new Promise((resolve) => {
-    server.listen(0, resolve);
-  });
-
-  const { port } = server.address();
-  t.after(() => closeServer(server));
-
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/stream/ams`);
+  const ws = new WebSocket(buildWebSocketUrl('ams'));
 
   await new Promise((resolve, reject) => {
     ws.once('open', resolve);
@@ -56,9 +84,10 @@ test('AMS payloads broadcast to subscribers and persist', async (t) => {
     ws.once('error', reject);
   });
 
-  const payload = { flightId: 'AAL123', event: 'ARRIVED', remarks: 'ONTIME' };
+  const uniqueId = `AAL${Date.now()}`;
+  const payload = { flightId: uniqueId, event: 'ARRIVED', remarks: 'ONTIME' };
 
-  await supertest(server)
+  await request
     .post('/publish/ams')
     .send(payload)
     .expect(202);
@@ -69,26 +98,20 @@ test('AMS payloads broadcast to subscribers and persist', async (t) => {
 
   await closeSocket(ws);
 
-  const rawLog = await fs.readFile(LOG_FILE, 'utf8');
-  const lines = rawLog.trim().split('\n');
-  const last = JSON.parse(lines.at(-1));
+  const entry = await findLogEntry((logEntry) => {
+    return logEntry.topic === 'ams' && logEntry.payload && logEntry.payload.flightId === uniqueId;
+  });
 
-  assert.equal(last.topic, 'ams');
-  assert.deepEqual(last.payload, payload);
+  assert.ok(entry, 'Expected AMS payload to be recorded in inbound.log');
+  assert.deepEqual(entry.payload, payload);
 
   console.log('[AMS] Broadcast + persistence test passed');
 });
 
 test('AMS payloads enforce schema rules', async (t) => {
-  const { server } = createAeroStreamServer();
+  await ensureServerAvailable();
 
-  await new Promise((resolve) => {
-    server.listen(0, resolve);
-  });
-
-  t.after(() => closeServer(server));
-
-  await supertest(server)
+  await request
     .post('/publish/ams')
     .send({ event: 'LANDING', remarks: 'ONTIME' })
     .expect(422)
@@ -96,7 +119,7 @@ test('AMS payloads enforce schema rules', async (t) => {
       assert.match(res.body.error, /flightId/);
     });
 
-  await supertest(server)
+  await request
     .post('/publish/ams')
     .send({ flightId: 'AAL123', event: 'LANDING7', remarks: 'ONTIME' })
     .expect(422)
@@ -104,7 +127,7 @@ test('AMS payloads enforce schema rules', async (t) => {
       assert.match(res.body.error, /event/);
     });
 
-  await supertest(server)
+  await request
     .post('/publish/ams')
     .send({ flightId: 'AAL123', event: 'LANDING', remarks: 'DELAYED#1' })
     .expect(422)

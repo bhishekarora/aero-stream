@@ -1,0 +1,1 @@
+curl -X POST http://localhost:3000/publish/ams -H 'Content-Type: application/json' -d '{"flightId":"AAL123","event":"ARRIVED","remarks":"ONTIME"}'

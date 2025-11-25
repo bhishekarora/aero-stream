@@ -8,6 +8,7 @@ const { WebSocketServer, WebSocket } = require('ws');
 const LOG_FILE = path.resolve(process.cwd(), 'inbound.log');
 const SCHEMA_DIR = path.resolve(process.cwd(), 'schemas');
 const schemaCache = new Map();
+const DEBUG_ENABLED = process.env.AEROSTREAM_DEBUG === 'true';
 
 const TYPE_PATTERNS = {
   alpha: /^[A-Za-z]+$/,
@@ -81,6 +82,15 @@ function validatePayloadAgainstSchema(topic, payload, schema) {
   }
 
   return null;
+}
+
+function debugLog(...args) {
+  if (!DEBUG_ENABLED) {
+    return;
+  }
+
+  // eslint-disable-next-line no-console
+  console.log('[AeroStream debug]', ...args);
 }
 
 function escapeHtml(unsafe) {
@@ -214,10 +224,14 @@ function createApp(broadcast) {
       payload,
     };
 
-    try {
-      await appendLog(eventEnvelope);
-    } catch (error) {
-      return res.status(500).json({ error: 'Failed to write inbound log' });
+    const shouldLog = !(topic === 'loadtest' && payload.mode !== 'SUMMARY');
+
+    if (shouldLog) {
+      try {
+        await appendLog(eventEnvelope);
+      } catch (error) {
+        return res.status(500).json({ error: 'Failed to write inbound log' });
+      }
     }
 
     broadcast(topic, eventEnvelope);
@@ -249,16 +263,21 @@ function createAeroStreamServer() {
   const broadcast = (topic, message) => {
     const clients = topicClients.get(topic);
     if (!clients || clients.size === 0) {
+      debugLog('No websocket clients registered for topic', topic);
       return;
     }
 
     const serialized = JSON.stringify(message);
 
+    let delivered = 0;
     for (const client of clients) {
       if (client.readyState === WebSocket.OPEN) {
         client.send(serialized);
+        delivered += 1;
       }
     }
+
+    debugLog('Broadcast complete', { topic, delivered, registered: clients.size });
   };
 
   const app = createApp(broadcast);
@@ -298,9 +317,11 @@ function createAeroStreamServer() {
 
     const clients = topicClients.get(topic);
     clients.add(ws);
+    debugLog('Websocket client connected', { topic, clients: clients.size });
 
     ws.on('close', () => {
       clients.delete(ws);
+      debugLog('Websocket client closed', { topic, clients: clients.size });
       if (clients.size === 0) {
         topicClients.delete(topic);
       }
@@ -308,6 +329,7 @@ function createAeroStreamServer() {
 
     ws.on('error', () => {
       clients.delete(ws);
+      debugLog('Websocket client errored', { topic, clients: clients.size });
       if (clients.size === 0) {
         topicClients.delete(topic);
       }

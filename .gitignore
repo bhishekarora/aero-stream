@@ -1,3 +1,4 @@
 node_modules/
 inbound.log
 .env
+clients/spring-consumer/target/

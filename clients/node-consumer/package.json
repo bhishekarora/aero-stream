@@ -1,0 +1,14 @@
+{
+  "name": "aero-stream-node-consumer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node.js sample consumer for Aero Stream Xovis topic",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}

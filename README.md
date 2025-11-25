@@ -78,3 +78,6 @@ Producer   |    Express        |
 ## License
 
 GPL
+
+## Tests 
+Tests use the local server.js server running on home port and don't spin up new.

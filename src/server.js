@@ -7,8 +7,10 @@ const { WebSocketServer, WebSocket } = require('ws');
 
 const LOG_FILE = path.resolve(process.cwd(), 'inbound.log');
 const SCHEMA_DIR = path.resolve(process.cwd(), 'schemas');
+const CONFIG_PATH = path.resolve(process.cwd(), 'config', 'config.json');
 const schemaCache = new Map();
 const DEBUG_ENABLED = process.env.AEROSTREAM_DEBUG === 'true';
+const topicConfig = loadTopicConfig();
 
 const TYPE_PATTERNS = {
   alpha: /^[A-Za-z]+$/,
@@ -30,25 +32,38 @@ function ensureLogFile() {
 }
 
 async function loadTopicSchema(topic) {
-  if (schemaCache.has(topic)) {
-    return schemaCache.get(topic);
+  const config = topicConfig.get(topic);
+  if (!config) {
+    throw new Error(`Topic "${topic}" is not configured`);
   }
 
-  const schemaPath = path.join(SCHEMA_DIR, `${topic}.schema.json`);
+  const schemaBaseName = config.schema || topic;
+  const schemaPath = path.join(SCHEMA_DIR, `${schemaBaseName}.schema.json`);
+
+  if (schemaCache.has(schemaPath)) {
+    return schemaCache.get(schemaPath);
+  }
 
   try {
     const contents = await fsp.readFile(schemaPath, 'utf8');
     const parsed = JSON.parse(contents);
-    schemaCache.set(topic, parsed);
+    schemaCache.set(schemaPath, parsed);
     return parsed;
   } catch (error) {
     if (error.code === 'ENOENT') {
-      schemaCache.set(topic, null);
-      return null;
+      throw new Error(`Schema file not found for topic "${topic}" at ${schemaPath}`);
     }
 
-    throw error;
+    throw new Error(`Failed to read schema for topic "${topic}": ${error.message}`);
   }
+}
+
+function isTopicConfigured(topic) {
+  return topicConfig.has(topic);
+}
+
+function listConfiguredTopics() {
+  return Array.from(topicConfig.keys());
 }
 
 function validatePayloadAgainstSchema(topic, payload, schema) {
@@ -106,6 +121,55 @@ async function appendLog(entry) {
   const serialized = `${JSON.stringify(entry)}\n`;
   await fsp.appendFile(LOG_FILE, serialized, 'utf8');
 } 
+
+function loadTopicConfig() {
+  let raw;
+
+  try {
+    raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+  } catch (error) {
+    throw new Error(`Failed to read topic config at ${CONFIG_PATH}: ${error.message}`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Failed to parse topic config JSON: ${error.message}`);
+  }
+
+  const { config } = parsed || {};
+  if (!config || typeof config !== 'object') {
+    throw new Error('Topic config must include a "config" object');
+  }
+
+  const { topics } = config;
+  if (!topics || typeof topics !== 'object' || Array.isArray(topics)) {
+    throw new Error('Topic config must include a "config.topics" object');
+  }
+
+  const map = new Map();
+
+  for (const [name, settings] of Object.entries(topics)) {
+    if (typeof name !== 'string' || !name.trim()) {
+      continue;
+    }
+
+    const topicName = name.trim();
+    const topicSettings = settings && typeof settings === 'object' ? { ...settings } : {};
+    const schemaName = typeof topicSettings.schema === 'string' && topicSettings.schema.trim()
+      ? topicSettings.schema.trim()
+      : topicName;
+
+    map.set(topicName, { ...topicSettings, schema: schemaName });
+  }
+
+  if (map.size === 0) {
+    throw new Error('Topic config must declare at least one topic');
+  }
+
+  return map;
+}
 
 async function readLogEntries() {
   try {
@@ -202,6 +266,10 @@ function createApp(broadcast) {
       return res.status(400).json({ error: 'Topic is required' });
     }
 
+    if (!isTopicConfigured(topic)) {
+      return res.status(404).json({ error: `Unknown topic "${topic}"`, topics: listConfiguredTopics() });
+    }
+
     if (payload === undefined || payload === null || typeof payload !== 'object') {
       return res.status(400).json({ error: 'JSON body is required' });
     }
@@ -210,6 +278,7 @@ function createApp(broadcast) {
     try {
       schema = await loadTopicSchema(topic);
     } catch (error) {
+      debugLog('Schema load failure', { topic, message: error.message });
       return res.status(500).json({ error: 'Failed to load topic schema' });
     }
 
@@ -301,6 +370,12 @@ function createAeroStreamServer() {
 
     if (!topic) {
       socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    if (!isTopicConfigured(topic)) {
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
     }

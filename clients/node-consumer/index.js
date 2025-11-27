@@ -1,7 +1,7 @@
 const express = require('express');
 const WebSocket = require('ws');
 
-const SOURCE_WS_URL = process.env.SOURCE_WS_URL || 'ws://localhost:3000/stream/xovis';
+const SOURCE_WS_URL = process.env.SOURCE_WS_URL || 'ws://localhost:3000/stream/ils';
 const PORT = Number(process.env.PORT || 4100);
 const MAX_MESSAGES = 200;
 

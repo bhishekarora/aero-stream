@@ -45,7 +45,7 @@ Producer   |    Express        |
 ## Load Testing
 
 - `node --test tests/loadtest.test.js` hammers `/publish/loadtest` with bursts from 100 to 1000 requests per second.
-- The stream reliably sustained 900 TPS while continuing to fan out WebSocket traffic to connected clients.
+- The stream reliably sustained <b>900<b>/ TPS while continuing to fan out WebSocket traffic to connected clients.
 - Summary messages are stored as `loadtest` entries in `inbound.log`, capturing transactions per second, success/fail counts, and average response time.
 - ![Load test results](images/lt.png)
 

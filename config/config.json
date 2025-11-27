@@ -1,0 +1,10 @@
+{
+  "config": {
+    "topics": {
+      "ams": {},
+      "xovis": {},
+      "loadtest": {},
+      "ils": {}
+    }
+  }
+}
